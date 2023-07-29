@@ -1,0 +1,167 @@
+---
+title: "KogiaEvents"
+author: "Jackson"
+format: html
+editor: visual
+---
+
+# Make Acoustic Study
+
+Set up an `AcousticStudy` from PAMguard data and save object to `derived_data` directory for subsequent analysis.
+
+## Raw Data
+
+A root directory `sr_XXXkHz` contains all raw data which must be all sampled at the same sampling rate.
+
+1.  PAMguard databases (.`sqlite3)` -- These are named after the drifts and follow the standard SAEL naming convention, e.g. "ADRIFT_067" or "CCES_016."
+    -   Events have been defined in PAMguard and the labels for the events reflect the correct species classification:
+        -   "Kosp" for Kogia
+
+        -   "Phph" for harbor porpoise
+
+        -   "Phda" for Dall's porpoise
+
+        -   "NBHF" for species unknown.
+2.  GPS tables (`.csv` )-- These, if available, are named according to the same format as the databases which they are associated with but also have a suffix of `_GPS.csv`, e.g. `ADRIFT_018.sqlite3` would be associated with `ADRIFT_018_GPS.csv`
+3.  PAMguard binaries -- A folder called `binaries/` with binary stores for all databases in this study.
+
+```{r}
+library(here)
+here::i_am("analysis/data/derived_data/makeStudy.qmd")
+```
+
+## Apply GPS data to drift databases
+
+Apply GPS files to the databases using `addPgGPS()` so that in later processing steps the Lat/Lon will be associated with the acoustic data.
+
+```{r}
+library(tools)
+library(PAMpal)
+library(tidyverse)
+
+
+# List of file paths to Pg Databases
+drift_dbs <- list.files(path = "C:/Users/jackv/Documents/thesis_data/",
+                      pattern = ".sqlite3",
+                      full.names = TRUE)
+
+# List of files with GPS data
+drift_csvs <- list.files(path = "C:/Users/jackv/Documents/thesis_data/",
+                         pattern = "_GPS.csv",
+                         full.names = TRUE)
+
+#for loop goes through and identifies whether each db has a matching CSV with gps data in it, in which case it will store the two file paths together as a list
+pairs_list <- vector('list', length = length(drift_dbs))
+for (i in seq_along(drift_dbs)){
+  driftname <- file_path_sans_ext(basename(drift_dbs[i]))
+  j <- grep(driftname, drift_csvs)
+  if (length(j)){
+    pairs_list[[i]] <- list(db = drift_dbs[i], csv = drift_csvs[j]) 
+  } else {
+    pairs_list[[i]] <- list(db = drift_dbs[i], csv = NULL)
+  }
+}
+
+#Add GPS csv data to Pg databases before further processing
+lapply(pairs_list, function (x){
+  mapply(addPgGps,x$db, x$csv,
+         MoreArgs = list(source = 'csv', format = "%Y-%m-%d %H:%M:%S"))
+  }
+)
+```
+
+## Create `AcousticStudy`
+
+Process data to create `AcousticStudy` object.
+
+-   Set high pass filter to 100 kHz, low pass filter to 160 kHz, leave all other settings default/recommended.
+
+```{r}
+#Path to root binaries folder
+drift_binaries <- "C:/Users/jackv/Documents/thesis_data/binaries/"
+
+#create PAMpal settings
+myPps <- PAMpalSettings(db = drift_dbs,
+                        binaries = drift_binaries,
+                        sr_hz = 'auto',
+                        filterfrom_khz = 100,
+                        filterto_khz = 160,
+                        winLen_sec = .0025)
+
+#Create AcousticStudy, mode = 'db' because the events were annotated in PAMguard
+myStudy <- processPgDetections(myPps,
+                               mode = 'db',
+                               id = 'VFB_study')
+
+#add species classification to each acoustic event in the Study, method = 'pamguard' because the event information was edited in PAMguard to indicate the species ID
+myStudy <- setSpecies(myStudy, method = 'pamguard')
+
+#add GPS data to study
+myStudy <- addGps(myStudy)
+
+#add ICI calculation to study
+myStudy <- calculateICI(myStudy, time = 'peakTime')
+```
+
+### Shorten Events
+
+Opportunistic recorders represent single encounters and were not partitioned into individual events when reviewing data in PAMguard. This is problematic because BANTER is a two stage classifier, where the second stage operates to classify events. So we decided to subdivide longer opportunistic recordings into 2-minute length events for training the model.
+
+```{r}
+##Function written by Taiki Sakai
+getTimes <- function(event) {
+  allDets <- getDetectorData(event)
+  justTimes <- bind_rows(lapply(allDets, function(x){
+    x[,c('UID','UTC')]
+  }))
+  justTimes
+}
+
+#Function written by Taiki Sakai
+timeToStartEnd <- function(time, length = 120){
+  range <- range(time)
+  lenSecs <- as.numeric(difftime(range[2], range[1], units = 'secs'))
+  numSplits <- ceiling(lenSecs / length)
+  start <- range[1] + length*0:(numSplits-1)
+  end <- start + length
+  list(start = start, end = end)
+}
+
+#code written by Taiki Sakai, bundled into a function shortenStudy()
+shortenStudy <- function(study) {
+  newEvents <- vector('list', length = length(events(study)))
+  for(i in seq_along(newEvents)){
+    thisEvent <- events(study)[[i]]
+    thisTime <- getTimes(thisEvent)
+    thisStartEnd <- timeToStartEnd(thisTime$UTC, length = 120)
+    if(length(thisStartEnd) == 1){
+      newEvents[[i]] <- list(thisEvent)
+      next
+      }
+    evList <- vector('list', length = length(thisStartEnd$start))
+    for(s in seq_along(thisStartEnd$start)) {
+      onePart <- filter(thisEvent, UTC >= thisStartEnd$start[s],
+                        UTC < thisStartEnd$end[s])
+      if(is.null(onePart)) next
+      id(onePart) <- paste0(id(onePart), '_', s)
+      evList[[s]] <- onePart
+      }
+    newEvents[[i]] <- evList
+    }
+  newEvents <-unlist(newEvents)
+  names(newEvents) <- sapply(newEvents, id)
+  shortStudy <- study
+  events(shortStudy) <- newEvents
+  shortStudy
+}
+
+myStudy <- shortenStudy(myStudy)
+```
+
+## Save Object
+
+Save the acoustic study object to `derived_data` so that it can be loaded for subsequent analysis
+
+```{r}
+saveRDS(myStudy, file = "myStudy.Rds")
+```
