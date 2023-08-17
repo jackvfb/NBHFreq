@@ -1,0 +1,132 @@
+---
+title: "makeFigs"
+author: "JVB"
+format: html
+editor: visual
+---
+
+```{r}
+library(PAMpal)
+library(tidyverse)
+```
+
+## Plotting Average Spectra
+
+### All events
+
+With the `calculateAverageSpectra()` function it is possible to characterize the signal by averaging across all events for a given species.
+
+Then the average spectra for each species are compared on the same plot along with average noise.
+
+```{r}
+
+```
+
+### By event
+
+Are there outliers that could be influencing the average? By plotting events individually, I can ascertain if there is agreement between events.
+
+```{r}
+#apply helper function to filtered studies
+#koEvList <- getStudySpectra(justKosp)
+#phEvList <- getStudySpectra(justPhph)
+shortEvList <- getStudySpectra(filter(shortStudy))
+#merge list of data frames into single df for plotting purposes
+allEvSpec <- reduce(shortEvList,rbind)
+
+#make single plot showing average spectra of all events individually, in addition to the average spectrum as calculated above using the calculateAverageSpectrum() function from PAMpal
+ggplot(mapping = aes(x = freq, y = avgSpec)) +
+  geom_line(data = allEvSpec, mapping = aes(group = evName, color = id)) +
+  geom_line(data = avAll, mapping = aes(x = freq, y = avgSpec, group = id))
+  #geom_line(data = filter(avAll, id == "Kosp"), color="red")+
+  #ggtitle("Individual Event Spectra in Blue and Average Spectrum in Red")
+```
+
+## Event statistics
+
+Mean event parameters that I will use are:
+
+-   3 db minimum frequency `fmin_3dB`
+
+-   3 db maximum frequency `fmax_3dB`
+
+-   peak frequency `peak`
+
+-   3 db bandwidth `BD_3dB`
+
+-   3 db Q `Q_3dB`
+
+```{r}
+#obtain data frame with all data from the Acoustic Study 
+clickData <- getClickData(myStudy)
+
+#summarize click data by event, choosing key parameters
+evSum <- summarise(clickData,
+                     peakAvg = mean(peak),
+                     BW_3dBAvg = mean(BW_3dB),
+                     Q_3dBAvg = mean(Q_3dB),
+                     fmin_3dBAvg = mean(fmin_3dB),
+                     fmax_3dBAvg = mean(fmax_3dB),
+                     .by = eventId)
+```
+
+```{r}
+
+
+```
+
+### Boxplots
+
+```{r}
+
+#pivot from "wide" data to "long" data
+evSumlong <- pivot_longer(evSum,
+                         !eventId,
+                         names_to = "param",
+                         values_to = "freq")
+
+#make first boxplot showing parameters fmin, fmax, and peak across the x axis.
+  evSumlong %>%
+    filter(param == c("peakAvg", "fmin_3dBAvg", "fmax_3dBAvg")) %>%
+    ggplot()+
+    geom_boxplot(aes(x=param, y=freq))+
+    scale_y_continuous(limits = c(110, 140))
+
+#make second boxplot showing parameters Q and BW across the x axis
+   evSumlong %>%
+    filter(param == c("Q_3dBAvg", "BW_3dBAvg")) %>%
+    ggplot(aes(x=param, y=freq))+
+    geom_boxplot()
+    #scale_y_continuous(limits = c(110, 140))
+```
+
+## T-test
+
+```{r}
+x3 <- 2:ncol(evSum)
+lapply(x3, function(p){
+  qqnorm(evSum[,p])
+  qqline(evSum[,p])
+  ggplot(data.frame(peakAvg = evSum[,p]), aes(peakAvg))+
+  geom_density()
+})
+
+
+t.test(evSum$peakAvg, mu = 120.29)
+
+```
+
+## Make Maps
+
+```{r}
+#first must obtain ClickData
+
+library(mapview)
+library(PAMpal)
+library(tidyverse)
+library(mapview)
+
+allDrifts <- getClickData(myStudy)
+mapview(allDrifts, xcol = "Latitude", ycol= "Longitude", crs)
+
+```

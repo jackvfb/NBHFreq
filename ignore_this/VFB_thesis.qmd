@@ -1,0 +1,477 @@
+---
+title: "VFB_thesis"
+author: "Jackson"
+format: html
+editor: visual
+---
+
+# Make Acoustic Study
+
+```{r}
+#| echo: FALSE
+
+library(tidyverse)
+library(PAMpal)
+
+#source helper functions
+r <- list.files("R/", full.names = TRUE)
+sapply(r, source)
+
+```
+
+## Apply GPS data to drift databases
+
+#NOT SURE IF THIS IS WORKING
+
+Apply GPS files to the databases using `addPgGPS()` so that in later processing steps the Lat/Lon will be associated with the acoustic data.
+
+```{r}
+# library(tools)
+# library(PAMpal)
+# library(tidyverse)
+#  
+# applyGPStoStudy <- function(dir){ 
+#   db <- list.files(here(dir, "db"), full.names = TRUE) 
+#   gps <- list.files(here(dir, "gps"), full.names = TRUE) 
+#   if (length(gps)==0) { 
+#     next 
+#   } 
+#   for (i in seq_along(db)){ 
+#       addPgGps(db[i], gps[i], source = 'csv', format = "%Y-%m-%d %H:%M:%S") #
+#} 
+#}
+# t <- applyGPStoStudy(studyDirs) #
+# 
+#List of file paths to Pg Databases 
+# drift_dbs <- list.files(path = "C:/Users/jackv/Documents/thesis_data/", 
+#                       pattern = ".sqlite3", 
+#                       full.names = TRUE) #  # # List of files with GPS data # drift_csvs <- list.files(path = "C:/Users/jackv/Documents/thesis_data/", 
+#                          pattern = "_GPS.csv", #                          full.names = TRUE) 
+#  
+# 
+#for loop goes through and identifies whether each db has a matching CSV with gps data in it, in which case it will store the two file paths together as a list 
+# pairs_list <- vector('list', length = length(drift_dbs)) 
+# for (i in seq_along(drift_dbs)){ 
+#   driftname <- file_path_sans_ext(basename(drift_dbs[i])) 
+#   j <- grep(driftname, drift_csvs) 
+#   if (length(j)){ 
+#     pairs_list[[i]] <- list(db = drift_dbs[i], csv = drift_csvs[j])  
+#   } else { 
+#     pairs_list[[i]] <- list(db = drift_dbs[i], csv = NULL) 
+#   } 
+# } 
+#  
+# 
+#Add GPS csv data to Pg databases before further processing 
+# lapply(pairs_list, function (x){ #   mapply(addPgGps,x$db, x$csv, 
+#          MoreArgs = list(source = 'csv', format = "%Y-%m-%d %H:%M:%S")) 
+#   } 
+# )
+```
+
+## Raw Data
+
+Acoustic recordings from multiple sources are being used.
+
+PAMguard detector `Click_Detector_5` was used on the raw acoustic recordings to identify signals of interest. This generated a database for each recording.
+
+`#NOT USED  raw_data/sr_XXXkHz/` contains all databases for which the sampling rate == XXX kHz. The sampling rate varies depending on when/how the recordings were made. #NOT USED
+
+```{r}
+#| echo: TRUE
+
+# #NOT NECESSARY TO ORGANIZE DATA THIS WAY, ALL CAN BE GROUPED
+# #We have data sampled at 384 kHz, 500 kHz, and 576 kHz in our raw_data directory
+# studyDirs <- dir(here("analysis", "data", "raw_data"),
+#                  full.names = TRUE)
+# 
+# #All study directories in the raw_data directory have a structure with directories for db, gps, and binaries
+# sapply(studyDirs, dir)
+```
+
+`raw_data/` contains three subdirectories: `db/`, `gps/`, and `binaries/`
+
+### Raw data types
+
+`db/` will contain PAMguard databases -- These are named after the drifts and follow the standard SAEL naming convention, e.g. "ADRIFT_067" or "CCES_016."
+
+Events have been defined in PAMguard and the labels for the events reflect the correct species classification:
+
+-   "Kosp" for Kogia
+
+-   "Phph" for harbor porpoise
+
+-   "Phda" for Dall's porpoise
+
+-   "NBHF" for species unknown.
+
+`gps/` will contain GPS tables (.csv ) -- These, if available, are named according to the same format as the databases which they are associated with but also have a suffix of `"_GPS"`.
+
+`binaries/` will contain PAMguard binaries
+
+## Process raw data
+
+To process data will use `PAMpal::processPgDetections()`. This creates `AcousticStudy` objects.
+
+The user defined parameters for processing the data that we will use are:
+
+-   Set high pass filter to 100 kHz
+-   Low pass filter to 160 kHz
+-   Leave all other settings default/recommended.
+
+```{r}
+
+# #Paths to raw_data dirs in a list
+# data_dirs <- list.files("./analysis/data/raw_data", full.names = TRUE)
+# dirs_names <- basename(data_dirs)+"/"
+# data_dirs <- as.list(data_dirs)
+# names(data_dirs) <- dirs_names
+
+#helper function to generate necessary paths NOT LONGER NEEDED
+# getPpsArgs <- function(dir){
+#   db <- list.files(here(dir, "db"), full.names = TRUE)
+#   binaries <- here(dir, "binaries")
+#   list(db = db, binaries = binaries)
+# }
+
+#helper function to set up and process a study NO LONGER NEEDED
+# makeStudy <- function(args, samprate, studyId) {
+#   
+#   pps <- PAMpalSettings(db = args$db,
+#                         binaries = args$binaries,
+#                         sr_hz = samprate,
+#                         filterfrom_khz = 100,
+#                         filterto_khz = 160,
+#                         winLen_sec = .0025)
+  
+
+# #Create AcousticStudy, mode = 'db' because the events were annotated in PAMguard
+# # code missing here
+# 
+#   #add species classification to each acoustic event in the Study, method = 'pamguard' because the event information was edited in PAMguard to indicate the species ID
+#   study <- setSpecies(study, method = 'pamguard')
+# 
+#   #add GPS data to study
+#   study <- addGps(study)
+# 
+#   #add ICI calculation to study
+#   study <- calculateICI(study, time = 'peakTime')
+#   
+#   #return study
+#   study
+# }
+
+# Create Pps, using settings specified above
+myPps <- PAMpalSettings(db = list.files("./analysis/data/raw_data/db",
+                                        full.names = TRUE),
+                        binaries = "./analysis/data/raw_data/binaries",
+                        filterfrom_kHz = 100,
+                        filterto_kHz = 160)
+
+# Create study, using mode = 'db' because events were annotated in PAMguard
+myStudy <- processPgDetections(myPps,
+                               mode = 'db',
+                               id = "NBHFreq")
+
+myStudy <- setSpecies(myStudy, method = 'pamguard')
+                        
+# sr_384.args <- getPpsArgs(here(rawDataDir, "sr_384kHz"))
+# sr_384.study <- makeStudy(sr_384.args, 384000, "sr_384kHz")
+# 
+# sr_500.args <- getPpsArgs(here(rawDataDir, "sr_500kHz"))
+# sr_500.study <- makeStudy(sr_500.args, 500000, "sr_500kHz")
+# 
+# sr_576.args <- getPpsArgs(here(rawDataDir, "sr_576kHz"))
+# sr_576.study <- makeStudy(sr_576.args, 576000, "sr_576kHz")
+
+```
+
+### Shorten Events in Opportunistic Recordings
+
+Opportunistic recorders represent single encounters and were not partitioned into individual events when reviewing data in PAMguard.
+
+In this study that was both the case for Eric Keen's data as well as the opportunistic Harbor porpoise recordings.
+
+Now that ADRIFT is recorded continuously there is a possibility that events are longer that 120 seconds.
+
+This is problematic because BANTER is a two stage classifier, where the second stage operates to classify events. So we decided to subdivide longer opportunistic recordings into 2-minute length events for training the model to make it more comparable to the CCES events.
+
+```{r}
+#just need training data so filter out NBHF
+myStudy <- shortenStudyEvents(filter(myStudy, species != 'NBHF'))
+#sr_500.study <- shortenStudyEvents(sr_500.study)
+```
+
+## Save Object
+
+Save the acoustic study object to `derived_data` so that it can be loaded for subsequent analysis
+
+```{r}
+
+saveRDS(myStudy, file = "./analysis/data/derived_data/myStudy.Rds")
+# saveRDS(sr_500.study, file = here(saveDir, "sr_500.study.Rds"))
+# saveRDS(sr_576.study, file = here(saveDir, "sr_576.study.Rds"))
+#         
+```
+
+## Plotting Average Spectra
+
+##NOT WORKING, NOT PLOTTING Phda CORRECTLY DESPITE FILTERING
+
+With `PAMpal::calculateAverageSpectra()` we first characterize the signal by averaging all detections for a given species.
+
+```{r}
+
+#All events in sr_576.study are classified as Kosp
+allKosp <- sr_576.study
+id(allKosp) <- "Kosp"
+
+#Opportunistic harbor porpoise recordings were sampled at 384 kHz only
+allPhph <- filter(sr_384.study, species == "Phph")
+id(allPhph) <- "Phph"
+
+#All events in sr_5oo.study are classified as Phda
+allPhda <- sr_500.study
+id(allPhda) <- "Phda"
+
+compareSpecies <- lapply(list(allKosp, allPhph, allPhda), getAvSpec)
+compareSpecies <- bind_rows(compareSpecies)
+
+ggplot(data = compareSpecies, mapping = aes(x = freq, y = avgSpec, color = species)) +
+  geom_line()
+```
+
+####By event
+
+Are there outliers that could be influencing the average? By plotting events individually, I can ascertain if there is agreement between events.
+
+```{r}
+#apply helper function to filtered studies
+#koEvList <- getStudySpectra(justKosp)
+#phEvList <- getStudySpectra(justPhph)
+shortEvList <- getStudySpectra(filter(shortStudy))
+#merge list of data frames into single df for plotting purposes
+allEvSpec <- reduce(shortEvList,rbind)
+
+#make single plot showing average spectra of all events individually, in addition to the average spectrum as calculated above using the calculateAverageSpectrum() function from PAMpal
+ggplot(mapping = aes(x = freq, y = avgSpec)) +
+  geom_line(data = allEvSpec, mapping = aes(group = evName, color = id)) +
+  geom_line(data = avAll, mapping = aes(x = freq, y = avgSpec, group = id))
+  #geom_line(data = filter(avAll, id == "Kosp"), color="red")+
+  #ggtitle("Individual Event Spectra in Blue and Average Spectrum in Red")
+```
+
+Event statistics
+
+Mean event parameters that I will use are:
+
+3 db minimum frequency fmin_3dB
+
+3 db maximum frequency fmax_3dB
+
+peak frequency peak
+
+3 db bandwidth BD_3dB
+
+3 db Q Q_3dB
+
+```{r}
+#obtain data frame with all data from the Acoustic Study 
+a <- getClickData(sr_500.study)
+b <- getClickData(sr_384.study)
+c <- getClickData(sr_576.study)
+
+clickData <- rbind(a, b, c)
+
+#summarize click data by event, choosing key parameters
+evSum <- summarise(clickData,
+                     peakAvg = mean(peak, na.rm = TRUE),
+                     BW_3dBAvg = mean(BW_3dB, na.rm = TRUE),
+                     Q_3dBAvg = mean(Q_3dB, na.rm = TRUE),
+                     fmin_3dBAvg = mean(fmin_3dB, na.rm = TRUE),
+                     fmax_3dBAvg = mean(fmax_3dB, na.rm = TRUE),
+                     .by = species)
+```
+
+#BoxPlots
+
+```{r}
+#pivot from "wide" data to "long" data
+evSumlong <- pivot_longer(evSum,
+                         !eventId,
+                         names_to = "param",
+                         values_to = "freq")
+
+#make first boxplot showing parameters fmin, fmax, and peak across the x axis.
+  evSumlong %>%
+    filter(param == c("peakAvg", "fmin_3dBAvg", "fmax_3dBAvg")) %>%
+    ggplot()+
+    geom_boxplot(aes(x=param, y=freq))+
+    scale_y_continuous(limits = c(110, 140))
+
+#make second boxplot showing parameters Q and BW across the x axis
+   evSumlong %>%
+    filter(param == c("Q_3dBAvg", "BW_3dBAvg")) %>%
+    ggplot(aes(x=param, y=freq))+
+    geom_boxplot()
+    #scale_y_continuous(limits = c(110, 140))
+```
+
+```{r}
+
+
+ggplot(data = clickData) +
+  stat_summary(
+    mapping = aes(x = species, y = BW_3dB),
+    fun.min = min,
+    fun.max = max, 
+    fun = mean
+  )
+
+
+```
+
+##Make Banter Model
+
+```{r}
+library(PAMpal)
+library(rfPermute)
+library(banter)
+library(tidyverse)
+
+# data(train.data)
+# bant.mdl <- initBanterModel(train.data$events)
+# summary(bant.mdl)
+# bant.mdl <- addBanterDetector(
+#   bant.mdl,
+#   data = train.data$detectors,
+#   ntree = 100,
+#   importance = TRUE,
+#   sampsize = 2
+# )
+# summary(bant.mdl)
+# plotDetectorTrace(bant.mdl)
+# bant.mdl <- runBanterModel(bant.mdl,
+#                            ntree = 100000,
+#                            sampsize = 3)
+# summary(bant.mdl)
+# bant.rf <- getBanterModel(bant.mdl)
+# bantData.df <- getBanterModelData(bant.mdl)
+#
+
+### Creating BANTER Model
+
+bantData <- export_banter(myStudy)
+bant.mdl <- initBanterModel(bantData$events)
+bant.mdl <- addBanterDetector(bant.mdl,
+                              data = bantData$detectors,
+                              ntree = 10000,
+                              importance = TRUE)
+summary(bant.mdl)
+bant.mdl <- runBanterModel(bant.mdl, ntree = 10000, sampsize = 2)
+bant.rf <- getBanterModel(bant.mdl)
+detector.rf <- getBanterModel(bant.mdl, "Click_Detector_5")
+summary(bant.mdl)
+summary(detector.rf)
+novData <- export_banter(myStudy,
+                         dropSpecies = c("Phph","Kosp", "Phda"))
+t1 <- predict(bant.mdl,novData)
+t1$predict.df
+# event.id predicted   Kosp   Phda   Phph original correct
+# 1  ADRIFT_015.OE3      Phph 0.3019 0.0034 0.6947     NBHF   FALSE
+# 2  ADRIFT_015.OE4      Phph 0.4161 0.1538 0.4301     NBHF   FALSE
+# 3  ADRIFT_015.OE5      Kosp 0.6698 0.0082 0.3220     NBHF   FALSE
+# 4  ADRIFT_015.OE6      Kosp 0.7126 0.0089 0.2785     NBHF   FALSE
+# 5  ADRIFT_015.OE7      Kosp 0.7476 0.0083 0.2441     NBHF   FALSE
+# 6  ADRIFT_015.OE1      Kosp 0.4772 0.1688 0.3540     NBHF   FALSE
+# 7  ADRIFT_015.OE2      Kosp 0.7517 0.0083 0.2400     NBHF   FALSE
+# 8  ADRIFT_015.OE8      Phph 0.2935 0.0000 0.7065     NBHF   FALSE
+# 9  ADRIFT_017.OE1      Phph 0.2430 0.0000 0.7570     NBHF   FALSE
+# 10 ADRIFT_017.OE2      Phph 0.1532 0.2616 0.5852     NBHF   FALSE
+# 11 ADRIFT_024.OE1      Phph 0.2134 0.0019 0.7847     NBHF   FALSE
+# 12 ADRIFT_024.OE3      Kosp 0.6601 0.0076 0.3323     NBHF   FALSE
+# 13 ADRIFT_024.OE4      Kosp 0.5809 0.0013 0.4178     NBHF   FALSE
+# 14 ADRIFT_025.OE1      Kosp 0.7560 0.0137 0.2303     NBHF   FALSE
+# 15 ADRIFT_025.OE2      Phph 0.2672 0.2000 0.5328     NBHF   FALSE
+# 16 ADRIFT_025.OE3      Kosp 0.6157 0.2295 0.1548     NBHF   FALSE
+#Suspicious because no Phda predictions for any ADRIFT events!
+plotTrace(bant.rf)
+plotTrace(detector.rf)
+plotImportance(bant.rf)
+plotImportance(detector.rf)
+plotPredictedProbs(detector.rf)
+plotProximity(bant.rf)
+
+```
+
+###Make Random Forest Model
+
+```{r}
+#Use a Random Forest to classify kogia vs. harbor porpoise
+#Anne Simonis 7/21/2023
+
+#Required Packages
+library(randomForest)
+library(dplyr)
+library(rfPermute)
+library(rpart)
+
+allDrifts <- getClickData(myStudy)
+allDrifts <- filter(allDrifts, species != 'NBHF' & Channel == 2)
+
+#Define response variable
+allDrifts$species<-as.factor(allDrifts$species)
+
+
+#List all variables you want to evaluate, including response variable (Species)
+covariate.list<-c('species','peak','BW_3dB','duration')
+
+include.covars <- which(names(allDrifts) %in% covariate.list)
+
+#make a text string of all covariates considered for a file name
+# string.covars.used <- paste0(names(allDrifts)[include.covars], sep="+", collapse="")
+
+#Create a dataframe for the RF model
+DF.model <- allDrifts[,include.covars]
+
+# Create single classification tree using rpart
+m1 <- rpart(
+  formula = species ~ .,
+  data = DF.model,
+  method = "class"
+)
+
+m1
+# create balanced sample sizes of response for tree construction to
+# avoid biases associated with imbalanced data
+my.samp.size <- balancedSampsize(DF.model$species)
+
+# set seed for reproducibility
+set.seed(123)
+
+# create balanced sample size random forest model
+RF.model <- randomForest(formula = species ~ .,
+                         data = DF.model,
+                         sampsize = my.samp.size,
+                         proximity = TRUE,
+                         importance = TRUE)
+RF.model
+plot(RF.model)
+#Evaluate RF models
+#Create a PDF of summary plots
+pdf(paste('RF_',string.covars.used,".pdf"), width=14, height=10)
+round(importance(rf),3) #ranking of importance for each variable
+plotImportance(RF.model) #visualize importance
+plotTrace(RF.model)   #model stability w/number of trees (this should be flat!)
+plotInbag(RF.model)
+plotImpPreds(RF.model, DF.model, "species")  #distribution of predictors
+plotPredictedProbs(RF.model)
+plotProximity(RF.model)
+dev.off()
+
+#Confusion matrix
+confusionMatrix(RF.model)
+
+#Save a Rdata file with the dataframe & RF model
+save.image(paste('RF_', string.covars.used, ".RData", sep=""))
+```

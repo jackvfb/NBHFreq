@@ -1,0 +1,197 @@
+---
+title: "compareModels"
+format: html
+editor: visual
+---
+
+```{r}
+library(banter)
+library(rfPermute)
+```
+
+## Two methods for defining events
+
+BANTER event classifier models were trained on events that were constructed using two different methods--
+
+-   **Initial method:** events were manually defined by selecting clicks consistent with expected NBHF parameters.
+
+    -   distinctly elevated spectral peak or peaks in the expected range 120-140 kHz
+
+    -   high amplitude detections (typically \>100 dB re ?)
+
+    -   grouped tightly in time along consistent but gradually shifting bearing angles, i.e. forming click trains
+
+    -   "stringray" shaped waveform
+
+    -   rounded spectral peaks that were moderately narrow to narrow
+
+    -   cohesive, clearly delineated regions in the Wigner plot, horizontally elongate.
+
+```{r}
+#
+#First training banter model and associated rf
+bant1 <- readRDS("data/derived_data/first_training/bant1_all.rds")
+event1.rf <- getBanterModel(bant1)
+detector1.rf <- getBanterModel(bant1, "allPk")
+```
+
+-   **New method:** the events from first method were amended to include all click detections inside the time interval defining the events. This step was meant to expand the number of detections in each event to encompass a noisier collection of data.
+
+    The rationale for including noisier data in defined events is
+
+    1.  it marginally decreases the amount of time required to manually define events, because the analyst does not need to manually separate true positive and false positive detections when constructing events.
+
+    2.  it may mitigate some of the analyst's bias when selecting true positives
+
+-   Altering event definition in this way did not impact the Kogia training set. This is because all the Kogia events are small and do not include any noise detections.
+
+-   This did impact the P. phocoena set, as the number of calls nearly doubled.
+
+```{r}
+#
+#Second training banter model and associated rf
+bant2 <- readRDS("data/derived_data/second_training/bant2_all.rds")
+event2.rf <- getBanterModel(bant2)
+detector2.rf <- getBanterModel(bant2, "allPk")
+
+#See how much larger the data set is after redefining events to include more noise
+numCalls(bant1)
+numCalls(bant2)
+```
+
+-   **Building models:**
+
+    -   see `R/makeModels.R`
+
+    -   Only Channel 2 detections were used to train the models.
+
+    -   Dall's porpoise could not be included as a class in the BANTER model because it contained only one event.
+
+    -   All models were trained with 1000 trees at both levels
+
+## Testing the two methods
+
+Models `bant1` (less noise) and `bant2` (more noise) were then compared to determine whether these methods impact classification at the event and then at the detector level
+
+The confusion matrices for the two models are output below. As you can see, event classification was not affected by the inclusion of noisier data.
+
+```{r}
+confusionMatrix(event1.rf)
+confusionMatrix(event2.rf)
+```
+
+The detector classifier in each model was marginally impacted since error increased from 1% to about 4%.
+
+```{r}
+confusionMatrix(detector1.rf)
+confusionMatrix(detector2.rf)
+```
+
+#### Detector traces
+
+The detector trace for model 2 exhibits more instability at lower number of trees, however both models stabilize as the forest grows.
+
+```{r}
+plotDetectorTrace(bant1, detector = "allPk")
+plotDetectorTrace(bant2, detector = "allPk")
+```
+
+#### Plot votes
+
+The detector models vote similarly. The distributions change appreciably for only a very small fraction of detections for both species.
+
+```{r}
+plotVotes(detector1.rf)
+plotVotes(detector2.rf)
+```
+
+#### Predicted Probabilities
+
+```{r}
+plotPredictedProbs(detector1.rf)
+plotPredictedProbs(detector2.rf)
+```
+
+## Defining call types by number of spectral peaks
+
+As a next stage of improvement, we discussed including a greater variety of detector classifiers at the first stage of the BANTER model. Up until this point, all detections had been lumped together as simply being clicks and therefore only one detector classifier could be trained at the first stage of the BANTER model.
+
+As an attempt to improve this, the detections in the training set were separated based on the number of spectral peaks. The number of spectral peaks `numPk` is now a categorical variable ranging from 1 to 3, and is defined after PAMpal calculates `peak`, `peak2`, and `peak3` for all the detections in every event.
+
+```         
+numPk = case_when(peak3 != 0 ~ 3,
+                  peak2 != 0 ~ 2,
+                  default = 1)
+```
+
+After separating the detections in this manner, three call classifiers could be trained at the first stage of the banter model to hopefully increase detection accuracy. There is not much room to improve event classification accuracy since it is already 100% correct :P
+
+Note that the new BANTER model was built with the same parameters as previous models (only detections from Channel 2, 1000 trees at both levels)
+
+```{r}
+
+#
+#
+#Model that now includes three different detection classifiers
+
+bant2.pk <- readRDS("data/derived_data/second_training/bant2_num.Rds")
+event2.pk.rf <- getBanterModel(bant2pk)
+detector2.pk1.rf <- getBanterModel(bant2pk, "pk1")
+detector2.pk2.rf <- getBanterModel(bant2pk, "pk2")
+detector2.pk3.rf <- getBanterModel(bant2pk, "pk3")
+
+```
+
+## Testing the new method
+
+#### Confusion matrices -- events
+
+Again, no impact to event classification
+
+```{r}
+confusionMatrix(event2.rf)
+confusionMatrix(event2.pk.rf)
+```
+
+#### Confusion matrices - detectors
+
+We can see that the best performing detector classifier is for 1-peaked clicks with 100% correct. The second best performing detector classifier is for 2-peaked clicks with 99.6% correct. That is followed by the any-peaked classifier. Last place: the 3-peaked click classifier.
+
+```{r}
+confusionMatrix(detector2.rf)
+confusionMatrix(detector2.pk1.rf)
+confusionMatrix(detector2.pk2.rf)
+confusionMatrix(detector2.pk3.rf)
+```
+
+#### Detector traces
+
+```{r}
+plotDetectorTrace(bant2, detector = "allPk")
+plotDetectorTrace(bant2.pk, detector = "pk1")
+plotDetectorTrace(bant2.pk, detector = "pk2")
+plotDetectorTrace(bant2.pk, detector = "pk3")
+```
+
+#### Plot votes
+
+```{r}
+plotVotes(detector2.rf)
+plotVotes(detector2.pk1.rf)
+plotVotes(detector2.pk2.rf)
+plotVotes(detector2.pk3.rf)
+```
+
+## Discussion
+
+The improved accuracy achieved by classifying 1-and 2-peaked clicks separately from 3-peaked clicks reveals a relationship between noiseLevel and numPk. The distributions below show that noisier clicks (those having a less negative value) generally have a greater quantity of peaks.
+
+![](images/count_noiseLevel_by_numPk-01)
+
+We can also see from the below plot that when clicks form a train, off-train clicks are most often three-peaked.
+
+![](images/clickTrain_by_numPk)
+
+This leads me to conclude that for our NBHF events, the set of three-peaked clicks encompasses the most noise. That explains why a classification model trained on just three-peaked clicks performs more poorly than classification models trained on just one- or two-peaked clicks OR those trained on all clicks.
+
+If we decide to construct events using a less selective method (i.e. method two), I think that then separating the calls by number of peaks would help us to mitigate the negative impact that this would have on classification accuracy.
