@@ -11,9 +11,9 @@ myStudy <- processPgDetections(myPps,
                                #in second_training, all clicks between event
                                #start and end times were included, no attempt
                                #to select
-                               id = 'first_training')
+                               id = 'second_training')
 
 
 myStudy <- setSpecies(myStudy, method = 'pamguard')
 myStudy <- addGps(myStudy)
-saveRDS(myStudy, "analysis/data/derived_data/first_training/study_first.Rds")
+saveRDS(myStudy, "analysis/data/derived_data/second_training/myStudy2.rds")

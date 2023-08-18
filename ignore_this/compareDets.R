@@ -223,4 +223,12 @@ ggplot(filter(dets, Channel == 2, species == "Kosp"))+
   geom_qq_line(aes(sample = peak))+
   facet_wrap(~numPk)
 
-#
+
+# DISTR OF PEAK BY NUMPK --------------------------------------------------
+
+dets <- getClickData(myStudy2)
+source("R/mutateDets.R")
+dets <- mutateDets(dets)
+
+ggplot()+
+  geom_point(dets$Ch1, mapping = aes(eventId, peak, color = numPk), position = "dodge")
