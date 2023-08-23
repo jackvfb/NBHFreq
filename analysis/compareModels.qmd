@@ -2,6 +2,8 @@
 title: "compareModels"
 format: html
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r}
@@ -30,9 +32,11 @@ BANTER event classifier models were trained on events that were constructed usin
 ```{r}
 #
 #First training banter model and associated rf
-bant1 <- readRDS("data/derived_data/first_training/bant1_all.rds")
+bant1 <- readRDS("analysis/data/derived_data/first_training/bant1_all.Rds")
 event1.rf <- getBanterModel(bant1)
 detector1.rf <- getBanterModel(bant1, "allPk")
+
+getwd()
 ```
 
 -   **New method:** the events from first method were amended to include all click detections inside the time interval defining the events. This step was meant to expand the number of detections in each event to encompass a noisier collection of data.
@@ -50,7 +54,7 @@ detector1.rf <- getBanterModel(bant1, "allPk")
 ```{r}
 #
 #Second training banter model and associated rf
-bant2 <- readRDS("data/derived_data/second_training/bant2_all.rds")
+bant2 <- readRDS("analysis/data/derived_data/second_training/bant2_all.rds")
 event2.rf <- getBanterModel(bant2)
 detector2.rf <- getBanterModel(bant2, "allPk")
 
@@ -134,11 +138,11 @@ Note that the new BANTER model was built with the same parameters as previous mo
 #
 #Model that now includes three different detection classifiers
 
-bant2.pk <- readRDS("data/derived_data/second_training/bant2_num.Rds")
-event2.pk.rf <- getBanterModel(bant2pk)
-detector2.pk1.rf <- getBanterModel(bant2pk, "pk1")
-detector2.pk2.rf <- getBanterModel(bant2pk, "pk2")
-detector2.pk3.rf <- getBanterModel(bant2pk, "pk3")
+bant2.pk <- readRDS("analysis/data/derived_data/second_training/bant2_num.Rds")
+event2.pk.rf <- getBanterModel(bant2.pk)
+detector2.pk1.rf <- getBanterModel(bant2.pk, "pk1")
+detector2.pk2.rf <- getBanterModel(bant2.pk, "pk2")
+detector2.pk3.rf <- getBanterModel(bant2.pk, "pk3")
 
 ```
 

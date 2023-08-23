@@ -1,0 +1,119 @@
+---
+title: "Event ordination"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+##Hypothesis
+
+Recorded NBHF clicks vary with respect to spectral parameters such as peak frequency. I hypothesize that NBHF species possess differing signatures with different mean characteristics.
+
+Detections of NBHF clicks occur in chronological groupings. Each grouping or event represents a sample of one of the populations whose variables we are interested in. In some cases, we have a best guess as to which taxon was sampled during the event.
+
+```{r}
+
+library(PAMpal)
+library(tidyverse)
+
+#Extract events from AcousticStudy
+source("R/getMyEvents.R")
+```
+
+##Event visualizations##
+
+The bar graph shows the depth of sampling for each event. The depth of sampling varies across three orders of magnitude, the smallest events containing n \<5 and the largest n \> 2000.
+
+```{r}
+
+#bar graph showing depth of sampling for all events
+spectra %>%
+  group_by(eventId) %>%
+  add_count() %>%
+  ggplot(aes(fct_reorder(eventId, n, .desc = TRUE), fill = species))+
+  stat_count()+
+  # facet_wrap(~Channel)+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(title = "N of clicks in all events, colored by species")
+
+#same info presented in a table, seperated by Channel
+metadata %>% 
+  print(n = Inf)
+
+```
+
+How do the click parameters in each event vary? From the visualizations below, it appears there may be some important variation in events. Some events have multiple bands forming in the heat maps, others do not.
+
+```{r}
+#Show distribution of peak frequencies binned in intervals of 100 Hz.
+#Separate distributions by event to investigate variation among events.
+
+#Just events classified a priori as Kogia
+spectra %>% 
+  group_by(eventId) %>% 
+  add_count %>%
+  filter(species == "Kosp") %>% 
+  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
+  geom_bin_2d()+
+  labs(title = "Distribution of peak frequencies in Kogia events") +
+  theme(axis.text.x = element_text(angle = 90))
+
+#Just harbor porpoise groundtruthed events
+spectra %>% 
+  group_by(eventId) %>% 
+  add_count %>%
+  filter(species == "Phph") %>% 
+  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
+  geom_bin_2d()+
+  labs(title = "Distribution of peak frequencies in P. phocoena events") +
+  theme(axis.text.x = element_text(angle = 90))
+
+#Just unknown events
+spectra %>% 
+  group_by(eventId) %>% 
+  add_count %>%
+  filter(species == "Unk") %>% 
+  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
+  geom_bin_2d()+
+  labs(title = "Distribution of peak frequencies in events with unknown species") +
+  theme(axis.text.x = element_text(angle = 90))
+
+```
+
+If we collapse all the events into a single pool of clicks, do the distributions appear normal about the population mean mu?
+
+```{r}
+
+```
+
+##Event ordination
+
+Is there a way to ordinate events based on diversity of spectral peaks? Could we use the techniques developed by ecologists to describe differences between diverse ecological communities? If we were to do this, an acoustic event would be analogous to a community, and each click would be analogous to a different taxon within that community. The distance between events would be calculated in the same way as the ecological metric beta diversity, where the range of different spectral peaks would be considered as well as the abundance of those varying peaks.
+
+```{r}
+library(vegan)
+
+#Function that will be used to bin clicks using a desired parameter
+source("R/countClicks.R")
+
+#Bin all clicks on Channel 1 by peak frequency using bin width = 0.1 kHz
+bins <- spectra %>% 
+  countClicks(param = peak, ch = 1, binw = 0.1)
+
+#Use vegan::vegdist() to calculate distances between events using the Bray method
+setseed(123)
+dist <- vegdist(bins$m, method = "bray")
+
+#Use NMDS to ordinate events
+nmds <- metaMDS(dist)
+
+#Plot results of NMDS
+scores(nmds) %>%
+  as_tibble(rownames = "eventId") %>%
+  inner_join(filter(metadata, Channel == 1), by = "eventId") %>%
+  ggplot(aes(x = NMDS1, y = NMDS2, color = species))+
+  geom_point()
+```
+
+We could also try rarefying the data which would help control for the differences between events that are due to the difference in sampling effort. This is relevant because we do have a wide array of sampling depths across our different events, with n ranging from \<10 to \>2000.

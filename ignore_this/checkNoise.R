@@ -1,22 +1,11 @@
 library(PAMpal)
 library(tidyverse)
 
-myStudy <- readRDS("analysis/data/raw_data/second_training/myStudy.rds")
-dets <- getClickData(myStudy)
-source("R/mutateDets.R")
-dets <- mutateDets(dets)
-
-# BASIC VIS ---------------------------------------------------------------
-
-#distributions of the variables by species
-library(manipulate)
-plotDataExplorer(myStudy)
-
-#use this to create a bar graph showing size of events colored by species
-ggplot(dets$allCh, aes(eventId, fill = species))+
-  stat_count()+
-  facet_wrap(~Channel)
-  theme(axis.text.x = element_text(angle = 90))
+# myStudy <- readRDS("analysis/data/raw_data/second_training/myStudy2.rds")
+# dets <- getClickData(myStudy)
+# source("R/mutateDets.R")
+# dets <- mutateDets(dets)
+#WRANGLE DATA IN THIS BLOCK
 
 
 # NOISE VIS ---------------------------------------------------------------
@@ -27,7 +16,6 @@ ggplot(dets$allCh, aes(eventId, fill = species))+
 # Also visualize whether there is a systematic error that could be causing
 # readings to vary systematically based on the db. Does calibration need to be
 # applied to the data?
-
 
 source("R/splitNoise.R")
 
