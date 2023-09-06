@@ -16,22 +16,25 @@ dets <- dets %>%
   mutate(species = if_else(species == "NBHF", "Unk", species))
 
 
-spectra <- dets %>%
+clicks <- dets %>%
   #discard 10_dB metrics in lieu of 3_dB metrics (per Zahn 2021)
   select(-c(Q_10dB:centerkHz_10dB, BinaryFile, detectorName, eventLabel, db)) %>%
   #make pretty
   relocate(c(UID, Channel, eventId, species)) %>%
   #make even more pretty
   relocate(gpsUncertainty, .after = Longitude) %>%
-  mutate(numPk = case_when(peak3 != 0 ~ 3,
-                           peak2 != 0 ~ 2,
-                           .default = 1))
+  mutate(numPk = as_factor(case_when(peak3 != 0 ~ 3,
+                                     peak2 != 0 ~ 2,
+                                     .default = 1))) %>%
+  mutate(Channel = as.factor(Channel))
 # #add_count grouped by eventId for later plotting
 # add_count(eventId, Channel)
 
 metadata <- dets %>%
   #select event metadata
   select(UID, Channel, eventId, species) %>%
+  #turn Channel into a numeric instead of a char
+  mutate(Channel = as.factor(Channel)) %>%
   #group by event to calculate n
   group_by(eventId, Channel) %>%
   #summarize

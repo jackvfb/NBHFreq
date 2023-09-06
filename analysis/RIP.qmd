@@ -1,0 +1,45 @@
+---
+title: "RIP"
+format: revealjs
+editor: visual
+---
+
+## Test Table
+
+My data looks like
+
+```{r}
+#| include: false
+library(PAMpal)
+library(tidyverse)
+```
+
+```{r}
+#| echo: false
+myStudy <- readRDS("data/derived_data/second_training/myStudy2.rds")
+str(as_tibble(getClickData(myStudy)))
+```
+
+::: notes
+These are test notes
+:::
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished presentation. To learn more about Quarto presentations see <https://quarto.org/docs/presentations/>.
+
+## Bullets
+
+When you click the **Render** button a document will be generated that includes:
+
+-   Content authored with markdown
+-   Output from executable code
+
+## Code
+
+When you click the **Render** button a presentation will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+#| echo: true
+1 + 1
+```

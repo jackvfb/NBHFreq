@@ -2,11 +2,9 @@
 title: "Event ordination"
 format: html
 editor: visual
-editor_options: 
-  chunk_output_type: console
 ---
 
-##Hypothesis
+## Hypothesis
 
 Recorded NBHF clicks vary with respect to spectral parameters such as peak frequency. I hypothesize that NBHF species possess differing signatures with different mean characteristics.
 
@@ -16,19 +14,28 @@ Detections of NBHF clicks occur in chronological groupings. Each grouping or eve
 
 library(PAMpal)
 library(tidyverse)
+library(glue)
+library(ggOceanMaps)
 
 #Extract events from AcousticStudy
 source("R/getMyEvents.R")
 ```
 
-##Event visualizations##
+## Locale
+
+```{r}
+basemap(data = gpsAll, bathymetry = TRUE, bathy.style = "rbb") +
+  geom_spatial_path(data = gpsAll, aes(x = Longitude, y = Latitude, .by = DriftName), size = 1, color = "red")
+```
+
+## Event visualizations
 
 The bar graph shows the depth of sampling for each event. The depth of sampling varies across three orders of magnitude, the smallest events containing n \<5 and the largest n \> 2000.
 
 ```{r}
 
 #bar graph showing depth of sampling for all events
-spectra %>%
+clicks %>%
   group_by(eventId) %>%
   add_count() %>%
   ggplot(aes(fct_reorder(eventId, n, .desc = TRUE), fill = species))+
@@ -37,57 +44,181 @@ spectra %>%
   theme(axis.text.x = element_text(angle = 90))+
   labs(title = "N of clicks in all events, colored by species")
 
-#same info presented in a table, seperated by Channel
-metadata %>% 
-  print(n = Inf)
-
 ```
 
-How do the click parameters in each event vary? From the visualizations below, it appears there may be some important variation in events. Some events have multiple bands forming in the heat maps, others do not.
+### Click trains
 
 ```{r}
-#Show distribution of peak frequencies binned in intervals of 100 Hz.
+clicks %>%
+  add_count(eventId) %>% 
+  nest(data = -c(eventId, n)) %>%
+  arrange(n) %>%
+  mutate(plots = map2(data, eventId,
+                      ~ggplot(data = .x, aes(x = UTC, y = angle)) +
+                        geom_point() +
+                        labs(title = .y))) %>% 
+  .$plots
+```
+
+How do the click parameters in each event vary? In @fig-event-heat-maps it appears there may be some important variation in events at the species level. Kogia has multiple bands forming in the heat maps, as does the collection of "unknown" events.
+
+```{r}
+#| label: fig-event-heat-maps
+#| fig-cap: "Binned distributions of peak frequencies in each event. Events are ordered by quantity of clicks, descending from left to right."
+
+
+#Show distribution of peak frequencies.
 #Separate distributions by event to investigate variation among events.
-
-#Just events classified a priori as Kogia
-spectra %>% 
-  group_by(eventId) %>% 
-  add_count %>%
-  filter(species == "Kosp") %>% 
-  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
-  geom_bin_2d()+
-  labs(title = "Distribution of peak frequencies in Kogia events") +
-  theme(axis.text.x = element_text(angle = 90))
-
-#Just harbor porpoise groundtruthed events
-spectra %>% 
-  group_by(eventId) %>% 
-  add_count %>%
-  filter(species == "Phph") %>% 
-  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
-  geom_bin_2d()+
-  labs(title = "Distribution of peak frequencies in P. phocoena events") +
-  theme(axis.text.x = element_text(angle = 90))
-
-#Just unknown events
-spectra %>% 
-  group_by(eventId) %>% 
-  add_count %>%
-  filter(species == "Unk") %>% 
-  ggplot(aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak))+
-  geom_bin_2d()+
-  labs(title = "Distribution of peak frequencies in events with unknown species") +
-  theme(axis.text.x = element_text(angle = 90))
+clicks %>% 
+  add_count(eventId) %>% 
+  nest(data = -species) %>% 
+  mutate(plots = map2(
+    data, species, 
+    ~ggplot(data = .x, aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak)) +
+      stat_bin_2d()+
+      # facet_wrap(~Channel)+
+      labs(title = glue("Distribution of peak frequencies in {.y} events"))+
+      theme(axis.text.x = element_text(angle = 90)))) %>%
+  .$plots
 
 ```
 
-If we collapse all the events into a single pool of clicks, do the distributions appear normal about the population mean mu?
+What about other parameters like duration?
+
+What if we look at the actual spectra
 
 ```{r}
+myEvs <- lapply(events(myStudy), id)
+spectra <-  lapply(myEvents, function(x){
+  calculateAverageSpectra(myStudy, evNum = x, plot = FALSE, filterfrom_khz = 110, filterto_khz = 150)
+})
 
+evSpectra <- lapply(spectra, function(x){
+  data.frame(value = x$avgSpec, freq = x$freq)
+})
+
+evSpectra <- list_rbind(evSpectra, names_to = "eventId")
+
+evSpectra %>%
+  inner_join(filter(metadata, Channel == 1), by = "eventId") %>% 
+  ggplot(aes(x = freq, y = value, .by = eventId, color = species))+
+  geom_line()+
+  scale_x_continuous(limits = c(110000, 150000))+
+  scale_y_continuous(limits = c(-50, 0))
 ```
 
-##Event ordination
+Looking at CV -- test hypothesis that Unk is a polyphyletic, heterogenous grouping compared to the other groups
+```{r}
+
+#calculate cv for each event
+ev.cv <- clicks %>%
+  group_by(eventId, Channel) %>%
+  summarize(cv = (sd(peak)/mean(peak))*100, .groups = "drop") %>% 
+  inner_join(metadata, by = c("eventId", "Channel"))
+
+#view distribution of cv values for all events
+ev.cv %>% 
+  ggplot(aes(x = cv))+
+  geom_density()+
+  facet_wrap(~Channel)
+
+ev.cv %>%
+  ggplot(aes(x = cv, color = species)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+#view variation in cv among events, with event parameters "species" and "n" also mapped
+ev.cv %>% 
+  ggplot(aes(x = n, y = cv, color = species, size = n))+
+  geom_point()+
+  scale_x_log10() +
+  facet_wrap(~Channel)
+
+# #calculate cv for each species
+# sp.cv <- clicks %>%
+#   group_by(species, Channel) %>%
+#   summarize(cv = (sd(peak)/mean(peak))*100, n = n(), .groups = "drop")
+# 
+#view variation in cv by species -- differences don't appear to be significant.
+# sp.cv %>%
+#   ggplot(aes(x = species, y = cv)) +
+#   geom_bar(stat = "identity") +
+#   facet_wrap(~Channel)
+  
+#Randomization experiment: redistribute clicks across all events, by species and channels, preserving size of events
+set.seed(123)
+rand_clicks <- clicks %>%
+  select(Channel, eventId, peak, species) %>%
+  nest(data = -c("species", "Channel")) %>% 
+  mutate(rand_peak = map(.x = data, ~sample(.x$peak))) %>% 
+  mutate(rand_data = map2(data, rand_peak, ~cbind(.x, rand_peak = .y)),
+         .keep = "unused") %>% 
+  unnest(rand_data) %>% 
+  mutate(peak = rand_peak, .keep = "unused")
+
+#now lets see if cv changed
+rand.cv <- rand_clicks %>%
+  group_by(eventId, Channel) %>%
+  summarize(cv = (sd(peak)/mean(peak))*100, .groups = "drop") %>% 
+  inner_join(metadata, by = c("eventId", "Channel"))
+
+#INTERESTING
+ggplot()+
+geom_freqpoly(data = ev.cv, aes(x = cv, color = 'red'))+
+geom_freqpoly(data = rand.cv, aes(x = cv, color = 'blue')) +
+facet_grid(Channel~species)
+
+rand.cv %>%
+  ggplot(aes(x = cv, color = species)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+rand.cv %>% 
+  ggplot(aes(x = n, y = cv, color = species, size = n))+
+  geom_point()+
+  scale_x_log10() +
+  facet_wrap(~Channel)
+
+ev.cv %>%
+  ggplot(aes(x = species, y = cv)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~Channel)
+
+ev.cv
+rand.cv
+---
+  
+clicks %>%
+  ggplot(aes(x = peak, color = species, .by = eventId)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+clicks %>%
+  ggplot(aes(x = peak, color = eventId)) +
+  geom_freqpoly() +
+  facet_grid(Channel~species)
+
+clicks %>%
+  ggplot(aes(x = peak, color = species)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+#lets just look at the biggest events -- cv could be reducing because there are fewer Kosp events when I slice.
+metadata %>% 
+  group_by(species, Channel) %>%
+  #Choose just the 5 largest events for each species (2 channels)
+  slice_max(n, n = 5) %>% 
+  ungroup() %>%
+  select(eventId, Channel) %>% 
+  inner_join(clicks, by = c("eventId", "Channel")) %>%
+  group_by(species, Channel) %>% 
+  summarize(cv = (sd(peak)/mean(peak))*100, n = n(), .groups = "drop") 
+  ggplot(aes(x = species, y = cv)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~Channel)
+```
+
+## Event ordination
 
 Is there a way to ordinate events based on diversity of spectral peaks? Could we use the techniques developed by ecologists to describe differences between diverse ecological communities? If we were to do this, an acoustic event would be analogous to a community, and each click would be analogous to a different taxon within that community. The distance between events would be calculated in the same way as the ecological metric beta diversity, where the range of different spectral peaks would be considered as well as the abundance of those varying peaks.
 
@@ -102,7 +233,7 @@ bins <- spectra %>%
   countClicks(param = peak, ch = 1, binw = 0.1)
 
 #Use vegan::vegdist() to calculate distances between events using the Bray method
-setseed(123)
+set.seed(123)
 dist <- vegdist(bins$m, method = "bray")
 
 #Use NMDS to ordinate events

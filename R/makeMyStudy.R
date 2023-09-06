@@ -15,5 +15,17 @@ myStudy <- processPgDetections(myPps,
 
 
 myStudy <- setSpecies(myStudy, method = 'pamguard')
-myStudy <- addGps(myStudy)
+
+# add GPS -----------------------------------------------------------------
+gpsFiles <- list.files("analysis/data/raw_data/second_training/gps", full.names = TRUE)
+
+gpsAll <- map(gpsFiles, read_csv)
+# have to remove DeviceId column because sometimes char, sometimes double
+gpsAll <- map(gpsAll, subset, select = -6)
+gpsAll <- gpsAll %>%
+  bind_rows() %>%
+  select(Latitude, Longitude, UTC)
+
+
+myStudy <- addGps(myStudy, gps = gpsAll)
 saveRDS(myStudy, "analysis/data/derived_data/second_training/myStudy2.rds")
