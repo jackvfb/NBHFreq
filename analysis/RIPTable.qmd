@@ -1,0 +1,39 @@
+---
+title: "RIP Talk Table"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+rf <- readRDS("data/derived_data/clickRF.rds")
+```
+
+|               |                                  |                                  |                                  |                                                       |     |
+|---------------|------------------|---------------|---------------|---------------|---------------|
+|               | *P. dalli*                       | *Kogia* spp.                     | *P. phocoena*                    | Class error (%)                                       |     |
+| *P. dalli*    | `r rf$confusion['Phda', 'Phda']` | `r rf$confusion['Phda', 'Kosp']` | `r rf$confusion['Phda', 'Phph']` | `r round(rf$confusion['Phda', 'class.error']*100, 2)` |     |
+| *Kogia* spp.  | `r rf$confusion['Kosp', 'Phda']` | `r rf$confusion['Kosp', 'Kosp']` | `r rf$confusion['Kosp', 'Phph']` | `r round(rf$confusion['Kosp', 'class.error']*100, 2)` |     |
+| *P. phocoena* | `r rf$confusion['Phph', 'Phda']` | `r rf$confusion['Phph', 'Kosp']` | `r rf$confusion['Phph', 'Phph']` | `r round(rf$confusion['Phph', 'class.error']*100, 2)` |     |
+
+: Confusion matrix of a `randomForest` classification model, trained on a sample of 42 clicks from each class. Forest contained 500 trees and 2 variables were tried at each split.

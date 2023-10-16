@@ -1,45 +1,241 @@
 ---
 title: "RIP"
-format: revealjs
+format:
+  revealjs:
+    incremental: true
 editor: visual
+bibliography: references.bib
 ---
 
-## Test Table
+# Introduction
 
-My data looks like
+## Acoustic Monitoring: Odontocetes
 
-```{r}
-#| include: false
-library(PAMpal)
-library(tidyverse)
-```
+-   Echolocating odontocetes produce impulses of sound called clicks when foraging, navigating.
+-   Acoustic monitoring helps us understand abundance, distribution, behavior, migration.
+-   Advantages of passive acoustic monitoring (PAM)
+    -   Autonomous, cost-effective -- weeks to months of archival recording.
+    -   More accurate and stable estimates of population size for cryptic species [@barlow2022].
+
+::: notes
+test
+:::
+
+## Ocean soundscape
+
+::: nonincremental
+![soundscape](images\soundscape.png)
+:::
+
+## Signals to signatures
+
+-   An echolocation click is an acoustic signal affected by the anatomy and ecology of the animal that produced it.
+
+    ```{r}
+    #| echo: false
+
+    library(tidyverse)
+    library(PAMpal)
+    library(seewave)
+
+    #get an example event
+    myStudy <- readRDS("data/derived_data/second_training/myStudy2.rds")
+    ev <- myStudy[["ADRIFT_015.OE5"]]
+
+    #pick the UID of a click at random
+    #uid <- sample(getClickData(ev)$UID, 1)
+    # [1] "3641000096" is a good one
+    uid <- 3641000096
+
+
+    #get the binary data needed to plot the waveforms of the clicks in the event
+    b <- getBinaryData(myStudy, UID = uid)
+    b <- b[[1]]
+    #plot channel 2 wave
+    plot(b$wave[,2], type = 'l', xlab = "Time", ylab = "Amplitude")
+
+    #get the matrix needed to plot the click spectra in the event
+    p <- calculateAverageSpectra(myStudy,
+                                 evNum = id(ev),
+                                 channel = 2,
+                                 filterfrom_khz = 110,
+                                 filterto_khz = 150,
+                                 plot = FALSE)
+
+    #get index of the column for uid
+    i <- match(uid, p$UID)
+
+    #Make spectrum
+    df <- data.frame(value = p$allSpec[,i], freq = p$freq)
+    ggplot(df, aes(freq/1000, value))+
+      geom_line() +
+      scale_x_continuous(breaks = seq(0, 200, by = 50)) +
+      labs(x = "Frequency (kHz)",
+           y = "Normalized Magnitude (dB)") +
+      theme_classic() +
+      theme(plot.title = element_text(face = "bold", hjust = 0.5))
+    ```
+
+## Signals to signatures
+
+-   A bout of clicks makes an event representing an encounter with a group or an individual
 
 ```{r}
 #| echo: false
-myStudy <- readRDS("data/derived_data/second_training/myStudy2.rds")
-str(as_tibble(getClickData(myStudy)))
+PAMpal::calculateAverageSpectra(myStudy,
+                                evNum = "ADRIFT_015.OE5",
+                                channel = 2,
+                                filterfrom_khz = 110,
+                                filterto_khz = 150,
+                                plot = c(TRUE, FALSE)
+                                )
 ```
 
 ::: notes
-These are test notes
+parameters of signal vary based on the identity/adaptations of the source size/anatomy of animal (cite) recognition prezygotic isolation barrier//whatever @kyhn2013 also as an adaptation to different prey, or habitat (e.g. depth, sediment) due to acoustic properties @malinka2021 When you encounter clicks they are in groups called events.
 :::
 
-## Quarto
+## Signatures to species
 
-Quarto enables you to weave together content and executable code into a finished presentation. To learn more about Quarto presentations see <https://quarto.org/docs/presentations/>.
+-   Peaks and notches in expected frequency bands [@soldevilla2008, @zahn2021]
 
-## Bullets
+-   Spectral envelope or shape [@baumann-pickering2013, @cohen2022]
 
-When you click the **Render** button a document will be generated that includes:
+-   
 
--   Content authored with markdown
--   Output from executable code
+::: notes
+I would say in this field there is not consensus around how to classify echolocation clicks to species. There are many different approaches.
 
-## Code
+Theres also not really consensus about what parameters should be considered and how and what models should be trained to predict.
 
-When you click the **Render** button a presentation will be generated that includes both content and the output of embedded code. You can embed code like this:
+Groundtruthed data are required to come up with a species description. But they are not always available.
+
+But predicting classification from ungroundtruthed data, it has been done using a variety of different approaches from manual to modelled. Modelling approaches vary in terms of what types of models are used and how the models are trained.
+
+What makes classification so hard: There are many different complications arising from the directionality of the clicks and the poorly understood vocal repertoire of many species, causes a lot of variability in the data. There is also geographic variability. So the same species, in two different areas, will have a different signature.
+
+Models are used and created in many different ways and using different approaches which can help by removign the bias of human analysts.But if you then make a model there is a big question about how you train the model.
+:::
+
+## Acoustic overlap in the California Current
+
+::: columns
+::: {.column width="50%"}
+![K. breviceps](images/kogia-breviceps.jpg){width="449"}
+
+![K. sima](images/kogia-sima.jpg){width="449"}
+:::
+
+::: {.column width="50%"}
+![P. dalli](images/dalls-porpoise.png){width="449"}
+
+![P. Phocoena](images/harbor-porpoise.png){width="449"}
+:::
+:::
+
+::: notes
+Four species with populations in the California Current whose echolocation clicks are still ambiguous and when these signals are detected there is still poor understanding of how to best classify them. Acoustic Overlap I'll be examining clicks defined as narrowband high-frequency because they fit a certain pattern, but instead of one species it is an overlap of many But think of it as a polyphyletic grouping -- in other words the detection of these ec lacks information about which species produced them Because in our region there are up to four different species and the differences between the species are poorly understood. Introduce the species + NBHF defn Region of sympatry with cryptic species -- there is still a lot to learn by modeling species differences in this region. Table: Comparison of NBHF click params Cite: Griffiths and others who published on groundtruthed data
+:::
+
+## Reported peak frequencies (F~p~)
+
++----------------+-------------------+---------------------------------------+------------------------------+
+| Species        | F~p~              | Location                              | Study                        |
++================+===================+=======================================+==============================+
+| *P. phocoena*  | 140, 137, 129-145 | Denmark, British Columbia             | @kyhn2013, @villadsgaard2007 |
++----------------+-------------------+---------------------------------------+------------------------------+
+| *P. dalli*     | 137, 134, 117-141 | British Columbia, Southern California | @kyhn2013, @griffiths2020,   |
+|                |                   |                                       |                              |
+|                |                   |                                       | @bassett2009                 |
++----------------+-------------------+---------------------------------------+------------------------------+
+| *K. sima*      | 123, 122, 129     | Bahamas, South Africa                 | @malinka2021                 |
++----------------+-------------------+---------------------------------------+------------------------------+
+| *K. breviceps* |                   |                                       |                              |
++----------------+-------------------+---------------------------------------+------------------------------+
+
+## My goal
+
+-   Resolve ambiguity in species classification using narrowband, high-frequency echolocation clicks
+-   Important because:
+    -   needed to independently monitor the populations
+    -   Kogia are cryptic and yet sympatric with P. dalli
+
+# Methods
+
+## Data collection
 
 ```{r}
-#| echo: true
-1 + 1
+#| label: fig-drift-map
+#| fig-cap: "Paths of acoustic recorders deployed on drifting buoys"
+#| echo: false
+
+library(ggOceanMaps)
+library(ggspatial)
+library(tidyverse)
+
+drift_gps <-  readRDS("data/derived_data/second_training/drift_gps.rds")
+bmap <- basemap(data = drift_gps, bathymetry = TRUE, bathy.style = "rbg")
+
+opps <- drift_gps[grep("OPPS", drift_gps$DriftName),]
+drifts <- drift_gps[grep("OPPS", drift_gps$DriftName, invert = TRUE),]
+drifts <- drifts %>% 
+  mutate(region = as_factor(case_when(grepl("CCES", DriftName) ~ "S region",
+                                      .default = "N region")))
+bmap +
+  geom_spatial_path(data = drifts,
+                         aes(x = Longitude, y = Latitude, color = region, group = DriftName),
+                         size = 1) +
+  geom_point(data = opps, aes(Longitude, Latitude), shape = 17, size = 2) +
+  scale_y_continuous(breaks = seq(30, 40, 5))
+  
 ```
+
+::: notes
+Drifter data from ADRIFT and CCES Drifting recorders deployed throughout California Current zone. Includes two regions, northern and southern. Southern region is outside Dall's porpoise region but shared by the kogiids (Kogia species) Northern region is combined all.
+:::
+
+## Data transformation
+
+-   We are going to take those raw recordings and use a click detector that is tuned to identify NBHF clicks -- sans taxonomic id Cite: PAMguard 2.
+
+-   Then we are going to identify periods of time -events- in each recording during which we believe the recording device encountered a group or an individual producing these clicks Cite: PAMguard
+
+-   Then we are going to perform a transformation on each click in all events, to calculate spectral parameters (16 of them) Cite: package PAMpal
+
+## Data analysis
+
+-   We are going to compare them, and make a best guess as to which species they represent, augmented with ground truthed recordings (where available)
+
+-   Use these events to define classes for a training model, and\* event classification\* model, which will help us estimate error associated with classification and also predict on novel data. Cite: package BANTER
+
+# Results
+
+## Summary Statistics
+
+Giving a glimpse of initial data set we have distribution of events Some challenges: events vary widely in size, groundtruthed data is lacking Figure: bar graph
+
+Defining events manually -- also challenging, all include false positives, a balance between cleaning the data and influencing it. Figure: click train
+
+## Regional differences in species composition
+
+::: {layout-ncol="2"}
+![H~0~: variance of randomized events is no different than observed events](images/randomize_homog.png){width="300"}
+
+![H~a~: variance of randomized events is greater than observed events](images/randomize_heterog.png){width="300"}
+:::
+
+# Discussion
+
+## Summary statistics
+
+-   suggest there is a difference in the northern and southern regions
+
+-   we would expect that the southern region would be more homogenous but, with the methods we have tried so far, this does not appear to be the case.
+
+## Next steps
+
+-   Reanalyze with more selectively chosen data
+
+-   Incorporate more robust analysis of other parameters not just F~p~
+
+-   Train Random Forest model to predict on events from Northern Region.

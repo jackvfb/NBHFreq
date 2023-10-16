@@ -1,0 +1,628 @@
+---
+title: "Analysis"
+format: html
+editor: visual
+---
+
+## Hypothesis
+
+Recorded NBHF clicks vary with respect to spectral parameters such as peak frequency. I hypothesize that NBHF species possess differing signatures with different mean characteristics.
+
+Detections of NBHF clicks occur in chronological groupings. Each grouping or event represents a sample of one of the populations whose variables we are interested in. In some cases, we have a best guess as to which taxon was sampled during the event.
+
+```{r}
+library(PAMpal)
+library(tidyverse)
+library(glue)
+library(ggOceanMaps)
+library(ggtext)
+
+# #Extract events from AcousticStudy
+# source("R/getMyEvents.R")
+```
+
+## Locale
+
+The drifts are divided into two regions, north and south. The drifts in the southern region from the CCES survey are at or below the southern extreme of the Dall's porpoise habitat range. So a best guess for the species classification is Kogia sp. In addition, there is a groundtruthed recording made opportunistically in the Morro Bay region for Harbor porpoise.
+
+```{r}
+#| label: fig-drift-map
+#| fig-cap: "Paths of acoustic recorders deployed on drifting buoys"
+#| echo: false
+
+library(ggOceanMaps)
+library(ggspatial)
+library(tidyverse)
+
+drift_gps <-  readRDS("analysis/data/derived_data/second_training/drift_gps.rds")
+bmap <- basemap(data = drift_gps, bathymetry = TRUE, bathy.style = "rbg")
+
+opps <- drift_gps[grep("OPPS", drift_gps$DriftName),]
+drifts <- drift_gps[grep("OPPS", drift_gps$DriftName, invert = TRUE),]
+
+drifts %>%
+  basemap(bathymetry = TRUE, bathy.style = "rbb") +
+  geom_spatial_path(data = drifts,
+                    mapping = aes(x = Longitude, y = Latitude,
+                                  group = DriftName),
+                        size = 1, color = 'red3') +
+  geom_point(data = opps, aes(Longitude, Latitude), shape = 17,
+             size = 2, color = 'red3') +
+  scale_y_continuous(breaks = seq(30, 40, 5))
+
+# Redo with marmap to reduce number of depth classes
+
+library(marmap)
+lon <-  range(drift_gps$Longitude)
+lat <- range(drift_gps$Latitude)
+bath <- getNOAA.bathy(lon1 = lon[1], lon2 = lon[2], lat1 = lat[1], lat2 = lat[2])
+
+plot.bathy(bath, image = TRUE, land = FALSE, lwd = 1, deepest.isobath = -200, shallowest.isobath = 0, step = 200, bpal = list(c(min(bath), -200, 'lightsteelblue3'), c(-200, 0, 'lightsteelblue1'), c(0, 0, 'grey90')))
+lines(drifts[,c("Longitude", "Latitude", "DriftName")])
+
+```
+
+## Event visualizations
+
+The bar graph shows the depth of sampling for each event. The depth of sampling varies across three orders of magnitude, the smallest events containing n \<5 and the largest n \> 2000. The southern region recordings have a greater proportion of small events, some with as fiew as three clicks. The northern region have a greater proportion of well-sampled events with higher quantities of clicks. The groundtruthed recordings have the greatest quantities of clicks.
+
+```{r}
+
+#bar graph showing depth of sampling for all events
+#define colors and labels
+
+#this will be used in the legend labels line two for each species
+lll2 <- clicks %>%
+  count(species)
+
+cols = c("Phda" = '#F8766D', "Kosp" = '#00BA38', "Phph" = '#619CFF')
+
+legLabs = c(
+  paste("**Harbor porpoise**<br>", lll2[3,2], "clicks", sep = " "),
+  paste("**Dall's porpoise**<br>", lll2[2,2], "clicks", sep = " "),
+  paste("***Kogia*** **spp**.<br>", lll2[1,2], "clicks", sep = " ")
+)
+metadata %>%
+  group_by(eventId) %>% 
+  summarize(n_tot = sum(n)) %>%
+  arrange(desc(n_tot)) %>%
+  inner_join(metadata, multiple = "first") %>% 
+  rownames_to_column() %>%
+  mutate(rowname = fct_reorder(rowname, n_tot, .desc = TRUE)) %>%
+  # mutate(species = as_factor(case_when(species == "Phph" ~ "Harbor porpoise",
+  #                                      species == "Phda" ~ "Dall's porpoise",
+  #                                      species == "Kosp" ~ "*Kogia* spp."))) %>%
+  ggplot(aes(x = rowname, y = n_tot, fill = species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  ylab(element_text("Clicks in Event")) +
+  xlab(element_text("Event Number")) +
+  labs(title = "Ground-truth NBHF Events by Species",
+       subtitle = "Recordings acquired 2016-2018") +
+  scale_y_log10(expand = c(0,0)) +
+  scale_fill_manual(values = cols,
+                    limits = c("Phph","Phda", "Kosp"),
+                    labels = legLabs)+
+  theme(plot.title = element_text(hjust = 0.5, size = 22),
+        plot.subtitle = element_text(hjust = 0.5, size = 18),
+        legend.text = element_markdown(hjust = 0.5, size = 12),
+        legend.title = element_blank(),
+        legend.key.size = unit(0.5, "inches"),
+        axis.text.x = element_text(hjust = 0.5, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.y = element_text(size = 14),
+        axis.title.x = element_text(size = 14))
+
+ggsave("analysis/images/events.png", height = unit(7, "inches"), width = unit(12, "inches"))
+
+metadata %>%
+  mutate(eventId = as.numeric(factor(eventId, levels = event_levels)))
+  ggplot(aes(x = eventId, y = count, fill = species)) +
+  geom_bar() +
+  # facet_wrap(~Channel)+
+  # theme(axis.text.x = element_text(angle = 90))+
+  theme_classic() +
+  ylab(element_text("Size of event (n clicks)")) +
+  xlab(element_text("Event number")) +
+  labs(title = "NBHF Events in Drifter Recordings, 2016-2018") +
+  scale_y_log10() +
+  # scale_x_binned(breaks = seq(0, 31, 1)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 18),
+        legend.text = element_markdown(),
+        axis.text.x = element_text(hjust = 0.5))
+
+#distribution of peak frequencies for all clicks by species
+clicks %>%
+  ggplot(aes(peak, color = species))+
+  geom_freqpoly()
+
+clicks %>%
+  ggplot(aes(peak, color = species))+
+  geom_density()
+  facet_wrap(~Channel)
+
+clicks %>%
+  ggplot(aes(peak, group = eventId))+
+  geom_freqpoly()+
+  facet_wrap(~species, scales = "free_y", ncol = 1)
+
+clicks %>%
+  ggplot(aes(peak))+
+  geom_freqpoly()+
+  facet_wrap(~species, scales = "free_y", ncol = 1)
+
+clicks %>% 
+  group_by(Channel, eventId) %>%
+  summarize(peak = mean(peak)) %>%
+  inner_join(metadata, by = c("eventId", "Channel")) %>%
+  ggplot(aes(x = peak, color = species))+
+  geom_freqpoly()+
+  facet_wrap(~ Channel)
+
+#violin plots of all parameters comparing the three species
+slide_clicks %>%
+  select(species, duration, peakTime, peak, centerkHz_3dB, fmin_3dB, fmax_3dB, Q_3dB, dBPP, trough) %>%
+  rename("Duration (\u03bcs)" = duration, "Peak Time" = peakTime, "F~p~ (kHz)" = peak, "F~c~" = centerkHz_3dB, "F~min~" = fmin_3dB, "F~max~ (kHz)" = fmax_3dB, "Q" = Q_3dB, "Peak-to-Peak Amplitude (dB)" = dBPP, "Trough (kHz)" = trough) %>% 
+  pivot_longer(cols = -species,
+               names_to = "Parameter") %>%
+  ggplot(aes(x = 1, y = value, fill = species)) +
+  geom_violin() +
+  facet_wrap(~Parameter, scales = "free_y") +
+  theme(strip.text = element_markdown(), axis.title.x = element_blank(), axis.text.x = element_blank(), axis.title.y = element_blank(), legend.text = element_markdown())
+  
+```
+
+```{r}
+#violin plots of just the highlights parameters
+slide_clicks %>%
+  select(species, fmin_3dB, fmax_3dB, centerkHz_3dB) %>%
+  rename("F~min~" = fmin_3dB, "F~max~" = fmax_3dB, "F~center~" = centerkHz_3dB) %>%
+  pivot_longer(cols = -species, names_to = "Parameter", values_to = "Frequency (kHz)") %>%
+  mutate(Parameter = factor(Parameter,
+                            levels = c("F~min~", "F~center~", "F~max~"))) %>%
+  ggplot(aes(x = 1, y = `Frequency (kHz)`, fill = species))+
+  geom_violin() +
+  facet_wrap(~Parameter, strip.position = "bottom")+
+  ylim(110, 150) +
+  labs(title = "Spectral Parameters re 3dB") +
+  theme(legend.text = element_markdown(), strip.text  = element_markdown(), axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), axis.title.x = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 18))
+
+clicks %>%
+  select(species, duration) %>% 
+  ggplot(aes(x = 1, y = duration, color = species))+
+  geom_violin() +
+  scale_y_log10()+
+  theme_classic() +
+  theme(legend.text = element_markdown())
+
+clicks %>%
+  select(species, dBPP) %>% 
+  ggplot(aes(x = 1, y = dBPP, color = species))+
+  geom_violin() +
+  theme_classic() +
+  theme(legend.text = element_markdown())
+```
+
+### Click trains
+
+Click trains are visible in the data due to the two-channel localization that is possible with these recorders. Events with greater quantity of clicks typically have well developed and readily apparent click trains, which are bouts of clicks that occur along a consistent and gradually changing bearing with respect to the recorder. Note that the angle will vary from 0 to 2Pi where angles 0 - Pi are below the horizontal plane of the recorder (i.e. more than 100 m deep) and Pi - 2Pi would be above the horizontal plane of the recorder (i.e. from about 100 m to the surface).
+
+```{r}
+clicks %>%
+  add_count(eventId) %>% 
+  nest(data = -c(eventId, n)) %>%
+  arrange(n) %>%
+  mutate(plots = map2(data, eventId,
+                      ~ggplot(data = .x, aes(x = UTC, y = angle)) +
+                        geom_point() +
+                        labs(title = .y))) %>% 
+  .$plots
+```
+
+## Spectral Parameters
+
+How do the click parameters in each event vary? In @fig-event-heat-maps it appears there may be some important variation in events at the species level. Kogia has multiple bands forming in the heat maps, as does the collection of "unknown" events.
+
+```{r}
+#| label: fig-event-heat-maps
+#| fig-cap: "Binned distributions of peak frequencies in each event. Events are ordered by quantity of clicks, descending from left to right."
+
+library(glue)
+#Show distribution of peak frequencies.
+#Separate distributions by event to investigate variation among events.
+clicks %>% 
+  add_count(eventId) %>% 
+  nest(data = -species) %>% 
+  mutate(plots = map2(
+    data, species, 
+    ~ggplot(data = .x, aes(x = fct_reorder(eventId, n, .desc = TRUE), y = peak)) +
+      stat_bin_2d()+
+      # facet_wrap(~Channel)+
+      labs(title = glue("Distribution of peak frequencies in {.y} events"))+
+      theme(axis.text.x = element_text(angle = 90)))) %>%
+  .$plots
+
+```
+
+What about other parameters like duration?
+
+What if we look at the actual spectra
+
+```{r}
+#first read in spectra_ch1 and spectra_ch2 rds from analysis/data/derived_data
+
+avgSpec_df <- function(x, ch){
+  data.frame(value = x$avgSpec, freq = x$freq, Channel = ch)
+}
+
+spectra.ch1.df <- lapply(spectra.ch1, avgSpec_df, ch = 1)
+spectra.ch2.df <- lapply(spectra.ch2, avgSpec_df, ch = 2)
+
+spectra.ch1.df <- list_rbind(spectra.ch1.df, names_to = "eventId")
+spectra.ch2.df <- list_rbind(spectra.ch2.df, names_to = "eventId")
+
+evSpectra <- as_tibble(rbind(spectra.ch1.df, spectra.ch2.df)) %>%
+  mutate(Channel = as.factor(Channel)) %>% 
+  inner_join(metadata, by = c("eventId", "Channel")) %>%
+  arrange(n)
+
+evSpectraPlot <- ggplot() +
+  geom_line(data = evSpectra, aes(x = freq, y = value, color = n, group = eventId)) +
+  scale_x_continuous(limits = c(110000, 150000)) +
+  scale_y_continuous(limits = c(-30, 0)) +
+  scale_color_steps(low = "grey", high = "grey0", space = "Lab", breaks = c(100, 1000)) +
+  facet_grid(species ~ Channel)+
+  theme(axis.text.x = element_text(angle = 90))
+
+evSpectraPlot
+
+```
+
+Now lets just pull that max spectral values
+
+```{r}
+peaks <- evSpectra %>%
+  filter(value == 0)
+
+vlines <- peaks %>% 
+  group_by(Channel, species) %>% 
+  summarize(freq = mean(freq))
+
+evSpectraPlot +
+  geom_point(data = peaks, aes(x = freq, y = 0), color = 'red') +
+  geom_vline(data = vlines, aes(xintercept = freq), color = 'red')
+```
+
+ABANDON THIS Lets do the same thing with individual detections instead of events
+
+```{r}
+getAllSpec <- function(x, ch) {
+  if (ch == 1) {
+    m <- spectra.ch1[[x]]$allSpec
+  } else {
+    m <- spectra.ch2[[x]]$allSpec
+  }
+  m <- m %>%
+    t() %>%
+    data.frame()
+  colnames(m) <- spectra.ch1[[x]]$freq
+  return(m)
+}
+
+m.ch1 <- lapply(myEvs, getAllSpec, ch = 1)
+m.ch2 <- lapply(myEvs, getAllSpec, ch = 2)
+
+df.ch1 <- m.ch1 %>%
+  list_rbind(names_to = "eventId") %>% 
+  cbind(Channel = 1)
+df.ch2 <- m.ch2 %>%
+  list_rbind(names_to = "eventId") %>% 
+  cbind(Channel = 2)
+
+clickSpectra <- rbind(df.ch1, df.ch2)
+```
+
+ABANDON THIS now that we have the spectra we can start plotting
+
+```{r}
+
+clickSpectra
+
+
+```
+
+## Variance in northern and southern regions
+
+Hypothesis that northern region is a polyphyletic, heterogenous grouping compared to the southern region. This is because the northern region is where Kogia and P. dalli are sympatric. This means that the variance of the clicks in the northern region should exceed that in the southern region. But we do not see this trend, in fact the CV is comparable among the two regions.
+
+```{r}
+#calculate cv for each species
+sp.cv <- clicks %>%
+  group_by(species, Channel) %>%
+  summarize(cv = (sd(peak)/mean(peak))*100, n = n(), .groups = "drop")
+
+# view variation in cv by species -- differences don't appear to be significant.
+sp.cv %>%
+  filter(species != "Phda") %>%
+  ggplot(aes(x = species, y = cv)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~Channel)
+```
+
+Drilling down, look at variance of events in each region. I hypothesize that events from the southern region, are all of the same species and would therefore variance of each event would not be significantly effected by randomizing clicks across all events. The northern region however, since events are presumably id'ed as different species, the same randomization experiment would induce a significant increase in the variance of events.
+
+As we see below, this is not the case. The randomization experiment significantly increases the variance of events in both regions. I interpret this to mean that there are important differences between events in all regions.
+
+```{r}
+cv <- function(v) {(sd(v, na.rm = TRUE)/mean(v, na.rm = TRUE))*100}
+
+set.seed(123)
+
+observed <- clicks %>%
+  select(Channel, species, eventId, peak, fmin_3dB:centerkHz_3dB)
+
+vlines <- observed %>%
+  group_by(Channel, species, eventId) %>%
+  summarize(across(everything(), cv)) %>%
+  summarize(across(-eventId, mean))
+
+null_ev_cv <- function(obs) {
+  obs %>%
+    nest(data = -c("species", "Channel")) %>% 
+    mutate(rand = map(.x = data, ~ sample(.x$eventId))) %>%
+    mutate(data = map2(.x = data, .y = rand, ~ cbind(.x, .y)),
+           .keep = "unused") %>%
+    unnest(data) %>% 
+    mutate(eventId = .y, .keep = "unused") %>% 
+    group_by(Channel, species, eventId) %>%
+    summarize(across(everything(), cv)) %>% 
+    summarize(across(-eventId, mean))
+}
+
+test <- map(1:100, ~null_ev_cv(observed))
+test <- list_rbind(test)
+
+plot_test <- function(param) {
+  test %>%
+    ggplot(aes(x = {{param}})) +
+    geom_histogram() +
+    geom_vline(data = vlines,
+               aes(xintercept = {{param}}), color = 'red') +
+    geom_text(data = vlines,
+              aes(x = {{param}}, y = 105, label = round({{param}}, digits = 2)),
+              hjust = 0,
+              color = 'red',
+              nudge_x = 0.1) +
+    facet_grid(species ~ Channel)
+}
+
+plot_test(peak)
+plot_test(fmin_3dB)
+plot_test(fmax_3dB)
+plot_test(BW_3dB)
+plot_test(centerkHz_3dB)
+
+```
+
+So lets do the next randomization experiment on regions rather than on events within each region. As expected, variance is significantly greater when clicks are randomized between the two regions.
+
+```{r}
+cv <- function(v) {(sd(v)/mean(v))*100}
+
+set.seed(123)
+
+observed <- clicks %>%
+  filter(species == "Kosp" | species == "Unk") %>% 
+  select(Channel, species, peak, fmin_3dB:centerkHz_3dB)
+
+vlines <- observed %>%
+  group_by(Channel, species) %>%
+  summarize(across(everything(), cv))
+
+params = c("peak", "fmin_3dB", "fmax_3dB", "BW_3dB")
+
+null_sp_cv <- function(obs) {
+  obs %>% 
+    filter(species == "Kosp" | species == "Unk") %>%
+    mutate(rand_species = sample(species)) %>%
+    group_by(rand_species, Channel) %>% 
+    summarize(peak = cv(peak))
+}
+
+test <- map(1:100, ~null_sp_cv(observed))
+test <- list_rbind(test)
+
+plot_test(peak)
+
+```
+
+We also need to to a randomization test comparing means between the two species. #Noise analysis
+
+```{r}
+avgNoise_df <- function(x, ch){
+  data.frame(value = x$avgNoise, freq = x$freq, Channel = ch)
+}
+
+noise.ch1.df <- lapply(spectra.ch1, avgNoise_df, ch = 1)
+noise.ch2.df <- lapply(spectra.ch2, avgNoise_df, ch = 2)
+
+noise.ch1.df <- list_rbind(noise.ch1.df, names_to = "eventId")
+noise.ch2.df <- list_rbind(noise.ch2.df, names_to = "eventId")
+
+evNoise <- as_tibble(rbind(noise.ch1.df, noise.ch2.df)) %>%
+  mutate(Channel = as.factor(Channel)) %>% 
+  inner_join(metadata, by = c("eventId", "Channel")) %>%
+  arrange(n)
+
+evNoisePlot <- ggplot() +
+  geom_line(data = evNoise, aes(x = freq, y = value, color = n, group = eventId)) +
+  scale_x_continuous(limits = c(110000, 150000)) +
+  scale_y_continuous(limits = c(-30, 0)) +
+  scale_color_steps(low = "grey", high = "grey0", space = "Lab", breaks = c(100, 1000)) +
+  facet_grid(species ~ Channel)+
+  theme(axis.text.x = element_text(angle = 90))
+
+evNoisePlot
+
+```
+
+```{r}
+#calculate cv for each event
+ev.cv <- clicks %>%
+  group_by(eventId, Channel) %>%
+  summarize(cv = (sd(peak)/mean(peak))*100, .groups = "drop") %>% 
+  inner_join(metadata, by = c("eventId", "Channel"))
+
+#view distribution of cv values for all events
+# ev.cv %>% 
+#   ggplot(aes(x = cv))+
+#   geom_density()+
+#   facet_wrap(~Channel)
+
+ev.cv %>%
+  ggplot(aes(x = cv)) +
+  geom_histogram() +
+  facet_grid(species~Channel)
+
+ev.cv %>%
+  filter(species == "Kosp" | species == "Unk") %>% 
+  ggplot(aes(x = cv, color = species)) +
+  geom_density()+
+  facet_wrap(~ Channel)
+
+#view variation in cv among events, with event parameters "species" and "n" also mapped
+ev.cv %>% 
+  ggplot(aes(x = n, y = cv, color = species))+
+  geom_point()+
+  scale_x_log10() +
+  facet_wrap(~Channel)
+
+#Randomization experiment: redistribute clicks across all events, by species and channels, preserving size of events
+set.seed(123)
+get_mean_randcv <- function(x){
+  rand_clicks <- clicks %>%
+    select(Channel, eventId, peak, species) %>%
+    nest(data = -c("species", "Channel")) %>%
+    mutate(rand_peak = map(.x = data, ~sample(.x$peak))) %>% 
+    mutate(rand_data = map2(data, rand_peak, ~cbind(.x, rand_peak = .y)),
+           .keep = "unused") %>% 
+    unnest(rand_data) %>% 
+    mutate(peak = rand_peak, .keep = "unused")
+  
+  #now lets see if cv changed
+  rand.cv <- rand_clicks %>%
+    group_by(eventId, Channel) %>%
+    summarize(rand_cv = (sd(peak)/mean(peak))*100, .groups = "drop") %>% 
+    inner_join(metadata, by = c("eventId", "Channel"))
+  
+  result <- rand.cv %>%
+    group_by(species, Channel) %>%
+    summarize(mean_randcv = mean(rand_cv), .groups = "drop")
+  
+  tibble(result, iteration = x)
+}
+  
+test <- map(1:100, ~get_mean_randcv(.x))
+test <- list_rbind(test)
+
+observed <- ev.cv %>%
+  group_by(species, Channel) %>%
+  summarize(mean_cv = mean(cv), .groups = "drop")
+
+test %>%
+  ggplot(aes(x = mean_randcv))+
+  geom_histogram()+
+  geom_vline(data = observed, aes(xintercept = mean_cv, color = 'red'))+
+  facet_grid(species ~ Channel)+
+  theme_bw()
+
+#Lets look at diff_cv again, because that was interesting
+rand_clicks <- clicks %>%
+    select(Channel, eventId, peak, species) %>%
+    nest(data = -c("species", "Channel")) %>% 
+    mutate(rand_peak = map(.x = data, ~sample(.x$peak))) %>% 
+    mutate(rand_data = map2(data, rand_peak, ~cbind(.x, rand_peak = .y)),
+           .keep = "unused") %>% 
+    unnest(rand_data) %>% 
+    mutate(peak = rand_peak, .keep = "unused")
+  
+rand.cv <- rand_clicks %>%
+  group_by(eventId, Channel) %>%
+  summarize(rand_cv = (sd(peak)/mean(peak))*100, .groups = "drop") %>% 
+  inner_join(metadata, by = c("eventId", "Channel"))
+
+diff_cv <- rand.cv %>% 
+  inner_join(ev.cv, by = c("eventId", "Channel", "species", "n"), keep = FALSE) %>%
+  relocate(rand_cv, .after = "cv") %>%
+  mutate(diff_cv = rand_cv - cv)
+
+
+diff_cv %>% 
+  ggplot(aes(x = diff_cv))+
+  geom_histogram()+
+  facet_grid(species ~ Channel)+
+  geom_vline(aes(xintercept = 0))
+
+diff_cv %>% 
+  ggplot(aes(x = n, y = diff_cv, color = species))+
+  geom_point()+
+  scale_x_log10()
+  facet_wrap(~ Channel)
+
+#INTERESTING
+ggplot()+
+geom_freqpoly(data = ev.cv, aes(x = cv, color = 'red'))+
+geom_freqpoly(data = rand.cv, aes(x = cv, color = 'blue')) +
+facet_grid(Channel~species)
+
+rand.cv %>%
+  ggplot(aes(x = cv, color = species)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+rand.cv %>% 
+  ggplot(aes(x = n, y = cv, color = species, size = n))+
+  geom_point()+
+  scale_x_log10() +
+  facet_wrap(~Channel)
+
+ev.cv %>%
+  ggplot(aes(x = species, y = cv)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~Channel)
+
+ev.cv
+rand.cv
+---
+  
+clicks %>%
+  ggplot(aes(x = peak, color = species, .by = eventId)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+clicks %>%
+  ggplot(aes(x = peak, color = eventId)) +
+  geom_freqpoly() +
+  facet_grid(Channel~species)
+
+clicks %>%
+  ggplot(aes(x = peak, color = species)) +
+  geom_density() +
+  facet_wrap(~Channel)
+
+#lets just look at the biggest events -- cv could be reducing because there are fewer Kosp events when I slice.
+metadata %>% 
+  group_by(species, Channel) %>%
+  #Choose just the 5 largest events for each species (2 channels)
+  slice_max(n, n = 5) %>% 
+  ungroup() %>%
+  select(eventId, Channel) %>% 
+  inner_join(clicks, by = c("eventId", "Channel")) %>%
+  group_by(species, Channel) %>% 
+  summarize(cv = (sd(peak)/mean(peak))*100, n = n(), .groups = "drop") 
+  ggplot(aes(x = species, y = cv)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~Channel)
+```

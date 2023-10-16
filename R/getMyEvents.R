@@ -2,7 +2,7 @@ library(tidyverse)
 library(PAMpal)
 
 #Extract tidy data from Acoustic Study
-myStudy <- readRDS('analysis/data/derived_data/second_training/myStudy2.rds')
+myStudy <- readRDS('analysis/data/derived_data/training/trainingStudy.rds')
 dets <- as_tibble(getClickData(myStudy))
 
 # DATA WRANGLE ------------------------------------------------------------
@@ -14,6 +14,10 @@ dets <- dets %>%
   drop_na(-c(Latitude, Longitude, gpsUncertainty, angle, angleError)) %>%
   #recode species to be more interpretable
   mutate(species = if_else(species == "NBHF", "Unk", species))
+  # mutate(region = case_when(species == "Unk" ~ "N",
+  #                           species == "Kosp" ~ "S",
+  #                           .default = "GT")) %>%
+  # mutate(region = factor(region, levels = c("N", "S", "GT")))
 
 
 clicks <- dets %>%
@@ -40,3 +44,15 @@ metadata <- dets %>%
   #summarize
   summarize(n = n(), species = unique(species)) %>%
   arrange(desc(n))
+
+# EXTRA STUFF FOR RIP TALK ------------------------------------------------
+
+##Will constrain to Channel 1 for generating figures for RIP talk
+slide_clicks <- clicks %>%
+  mutate(species = case_when(species == "Kosp" ~ "*Kogia* spp.",
+                             species == "Phda" ~ "Dall's porpoise",
+                             species == "Phph" ~ "Harbor porpoise")) %>%
+  mutate(species = factor(species, levels = c("Harbor porpoise",
+                                              "Dall's porpoise",
+                                              "*Kogia* spp."))) %>%
+  filter(as.numeric(Channel) == 1)
